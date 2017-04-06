@@ -3,7 +3,6 @@ namespace Serenity
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
 
     public class GridRowSelectionMixin : ScriptContext
     {
@@ -70,6 +69,14 @@ namespace Serenity
             UpdateSelectAll();
         }
 
+        public void SelectKeys(string[] keys)
+        {
+            foreach (var k in keys)
+                include[k] = true;
+
+            UpdateSelectAll();
+        }
+
         public void ResetCheckedAndRefresh()
         {
             include = new JsDictionary<string, bool>();
@@ -86,17 +93,27 @@ namespace Serenity
 
         public List<string> GetSelectedKeys()
         {
-            return include.Keys.ToList();
+            return Object.Keys(include).As<List<string>>();
         }
 
         public List<Int32> GetSelectedAsInt32()
         {
-            return include.Keys.Select(x => Int32.Parse(x)).ToList();
+            return Object.Keys(include).Map(x => Int32.Parse(x)).As<List<Int32>>();
         }
 
         public List<Int64> GetSelectedAsInt64()
         {
-            return include.Keys.Select(x => Int64.Parse(x)).ToList();
+            return Object.Keys(include).Map(x => Int64.Parse(x)).As<List<Int64>>();
+        }
+
+        public void SetSelectedKeys(string[] keys)
+        {
+            Clear();
+
+            foreach (var k in keys)
+                include[k] = true;
+
+            UpdateSelectAll();
         }
 
         public static SlickColumn CreateSelectColumn(Func<GridRowSelectionMixin> getMixin)

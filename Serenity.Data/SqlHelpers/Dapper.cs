@@ -1,4 +1,5 @@
-﻿/*
+﻿#if !COREFX
+/*
  License: http://www.apache.org/licenses/LICENSE-2.0 
  Home page: http://code.google.com/p/dapper-dot-net/
 
@@ -19,7 +20,6 @@ using System.Reflection.Emit;
 using System.Text;
 using System.Threading;
 using System.Text.RegularExpressions;
-using System.Diagnostics;
 using Serenity.Data;
 
 
@@ -881,6 +881,9 @@ this IDbConnection cnn, string sql, dynamic param = null, IDbTransaction transac
                 int hash = GetColumnHash(reader);
                 if (tuple.Func == null || tuple.Hash != hash)
                 {
+                    if (reader.FieldCount == 0) //https://code.google.com/p/dapper-dot-net/issues/detail?id=57
+                        yield break;
+
                     tuple = info.Deserializer = new DeserializerState(hash, GetDeserializer(typeof(T), reader, 0, -1, false));
                     SetQueryCache(identity, info);
                 }
@@ -3549,3 +3552,4 @@ string name, object value = null, DbType? dbType = null, ParameterDirection? dir
 #endif
 
 }
+#endif

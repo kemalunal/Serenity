@@ -1,21 +1,19 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Configuration;
-using System.Linq;
-using System.IO;
-using System.Web;
-using System.Web.Hosting;
-using Serenity.Web;
+﻿using Serenity.ComponentModel;
 using Serenity.Configuration;
 using Serenity.Data;
-using Newtonsoft.Json;
+using System;
 using System.Collections.Concurrent;
-using MsieJavaScriptEngine;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Web;
+using System.Web.Hosting;
 
 namespace Serenity.Web
 {
     public static class ScriptBundleManager
     {
+        [SettingKey("ScriptBundling"), SettingScope("Application")]
         private class ScriptBundlingSettings
         {
             public bool? Enabled { get; set; }
@@ -43,7 +41,7 @@ namespace Serenity.Web
                 if (scriptBundles == null)
                 {
                     scriptBundles = JsonConfigHelper.LoadConfig<Dictionary<string, string[]>>(
-                        HostingEnvironment.MapPath("~/Scripts/Site/ScriptBundles.json"));
+                        HostingEnvironment.MapPath("~/Scripts/site/ScriptBundles.json"));
                 }
 
                 return scriptBundles;
@@ -73,14 +71,10 @@ namespace Serenity.Web
             isEnabled = false;
             bundleKeyBySourceUrl = null;
             bundleByKey = null;
-            MsieJsEngine jsEngine = null;
             try
             {
-                var settings = JsonConvert.DeserializeObject<ScriptBundlingSettings>(
-                    ConfigurationManager.AppSettings["ScriptBundling"].TrimToNull() ?? "{}", JsonSettings.Tolerant);
-
-                if (settings == null ||
-                    settings.Enabled != true)
+                var settings = Config.Get<ScriptBundlingSettings>();
+                if (settings.Enabled != true)
                     return;
 
                 var bundles = ScriptBundles;
@@ -121,10 +115,7 @@ namespace Serenity.Web
 
                         bundleParts.Add(() =>
                         {
-                            if (HttpContext.Current == null)
-                                return String.Format(errorLines, "Tried to generate script while HttpContext is null");
-
-                            var sourcePath = HttpContext.Current.Server.MapPath(sourceUrl);
+                            var sourcePath = HostingEnvironment.MapPath(sourceUrl);
                             if (!File.Exists(sourcePath))
                                 return String.Format(errorLines, String.Format("File {0} is not found!", sourcePath));
 
@@ -136,18 +127,21 @@ namespace Serenity.Web
                                     if (File.Exists(minPath))
                                     {
                                         sourcePath = minPath;
-                                        using (StreamReader sr = new StreamReader(sourcePath))
+                                        using (StreamReader sr = new StreamReader(File.OpenRead(sourcePath)))
                                             return sr.ReadToEnd();
                                     }
                                 }
 
                                 string code;
-                                using (StreamReader sr = new StreamReader(sourcePath))
+                                using (StreamReader sr = new StreamReader(File.OpenRead(sourcePath)))
                                     code = sr.ReadToEnd();
 
                                 try
                                 {
-                                    return MinimizeWithUglifyJS(ref jsEngine, code);
+                                    var result = NUglify.Uglify.Js(code);
+                                    if (result.HasErrors)
+                                        return code;
+                                    return result.Code;
                                 }
                                 catch (Exception ex)
                                 {
@@ -156,7 +150,7 @@ namespace Serenity.Web
                                 }
                             }
 
-                            using (StreamReader sr = new StreamReader(sourcePath))
+                            using (StreamReader sr = new StreamReader(File.OpenRead(sourcePath)))
                                 return sr.ReadToEnd();
                         });
                     }
@@ -173,11 +167,6 @@ namespace Serenity.Web
             catch (Exception ex)
             {
                 ex.Log();
-            }
-            finally
-            {
-                if (jsEngine != null)
-                    jsEngine.Dispose();
             }
         }
 
@@ -221,7 +210,6 @@ namespace Serenity.Web
                 {
                     if (s.Length < 0)
                         return false;
-
                     int y;
                     return s.Split('.').All(x => Int32.TryParse(x, out y));
                 })
@@ -258,7 +246,6 @@ namespace Serenity.Web
 
             if (idx < 0)
                 return scriptUrl;
-
             string result;
             if (expandVersion.TryGetValue(scriptUrl, out result))
                 return result;
@@ -271,9 +258,10 @@ namespace Serenity.Web
 
             path = Path.GetDirectoryName(path);
 
-            var beforeName = Path.GetFileName(before.Replace('/', '\\'));
 
-            var latest = GetLatestVersion(path, beforeName + "*" + extension.Replace('/', '\\'));
+            var beforeName = Path.GetFileName(before.Replace('/', System.IO.Path.DirectorySeparatorChar));
+
+            var latest = GetLatestVersion(path, beforeName + "*" + extension.Replace('/', System.IO.Path.DirectorySeparatorChar));
             if (latest == null)
             {
                 expandVersion[scriptUrl] = scriptUrl;
@@ -289,67 +277,16 @@ namespace Serenity.Web
         {
             scriptUrl = ExpandVersionVariable(scriptUrl);
             scriptUrl = VirtualPathUtility.ToAbsolute(scriptUrl);
-
             Initialize();
 
             if (!isEnabled || bundleKeyBySourceUrl == null)
                 return scriptUrl;
-
             string bundleKey;
             if (!bundleKeyBySourceUrl.TryGetValue(scriptUrl, out bundleKey))
                 return scriptUrl;
 
             string include = DynamicScriptManager.GetScriptInclude("Bundle." + bundleKey);
             return VirtualPathUtility.ToAbsolute("~/DynJS.axd/" + include);
-        }
-
-        private static MsieJsEngine SetupJsEngine()
-        {
-            MsieJsEngine jsEngine;
-            try
-            {
-                jsEngine = new MsieJsEngine(new JsEngineSettings { EngineMode = JsEngineMode.ChakraIeJsRt });
-            }
-            catch
-            {
-                jsEngine = new MsieJsEngine();
-            }
-            try
-            {
-                using (var sr = new StreamReader(
-                    typeof(ScriptBundleManager).Assembly.GetManifestResourceStream(
-                        "Serenity.Web.Scripts.optimization.uglifyjs.min.js")))
-                {
-                    jsEngine.Evaluate(sr.ReadToEnd());
-                }
-
-                return jsEngine;
-            }
-            catch
-            {
-                jsEngine.Dispose();
-                throw;
-            }
-        }
-
-        private static string MinimizeWithUglifyJS(ref MsieJsEngine jsEngine, string code)
-        {
-            jsEngine = jsEngine ?? SetupJsEngine();
-            jsEngine.SetVariableValue("CodeToCompress", code);
-
-            jsEngine.Evaluate(
-                @"(function() { 
-                    var ast = UglifyJS.parse(CodeToCompress);
-                    ast.figure_out_scope();
-                    var compressor = UglifyJS.Compressor();
-                    ast = ast.transform(compressor);
-                    ast.figure_out_scope();
-                    ast.compute_char_frequency();
-                    ast.mangle_names();
-                    CodeToCompress = ast.print_to_string();
-                })();");
-
-            return jsEngine.GetVariableValue<string>("CodeToCompress");
         }
     }
 }

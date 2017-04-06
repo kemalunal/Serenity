@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Html;
-using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace Serenity
@@ -38,7 +37,7 @@ namespace Serenity
                 #pragma warning restore 618
             }
 
-            if (options.InplaceAdd)
+            if (options.InplaceAdd && (options.InplaceAddPermission == null || Q.Authorization.HasPermission(options.InplaceAddPermission)))
                 AddInplaceCreate(Q.Text("Controls.SelectEditor.InplaceAdd"));
         }
 
@@ -93,9 +92,9 @@ namespace Serenity
         }
 
         [IncludeGenericArguments(false)]
-        protected virtual IEnumerable<TItem> GetItems(Lookup<TItem> lookup)
+        protected virtual List<TItem> GetItems(Lookup<TItem> lookup)
         {
-            return FilterItems(CascadeItems(lookup.Items)).ToList();
+            return FilterItems(CascadeItems(lookup.Items));
         }
 
         [IncludeGenericArguments(false)]
@@ -181,14 +180,24 @@ namespace Serenity
 
         protected virtual void InitNewEntity(TItem entity)
         {
+            if (!string.IsNullOrEmpty(CascadeField))
+                entity.As<dynamic>()[CascadeField] = CascadeValue;
+
+            if (!string.IsNullOrEmpty(FilterField))
+                entity.As<dynamic>()[FilterField] = FilterValue;
+
             if (OnInitNewEntity != null)
                 OnInitNewEntity(entity);
         }
 
+        [IntrinsicProperty]
         public Action<TItem> OnInitNewEntity { get; set; }
 
         protected override void InplaceCreateClick(jQueryEvent e)
         {
+            if (ReadOnly)
+                return;
+
             var self = this;
             CreateEditDialog(dialog =>
             {
@@ -209,8 +218,7 @@ namespace Serenity
                     var entity = new object().As<TItem>();
                     entity.As<JsDictionary<string, object>>()[GetLookup().TextField] = lastCreateTerm.TrimToEmpty();
 
-                    if (OnInitNewEntity != null)
-                        OnInitNewEntity(entity);
+                    InitNewEntity(entity);
 
                     dialog.Load(entity, () => dialog.DialogOpen(), null);
                 }
@@ -232,11 +240,11 @@ namespace Serenity
             }
 
             var key = CascadeValue.ToString();
-            return items.Where(x =>
+            return items.Filter(x =>
             {
                 var itemKey = ((dynamic)x)[CascadeField] ?? ReflectionUtils.GetPropertyValue(x, CascadeField);
                 return itemKey != null && ((object)itemKey).ToString() == key;
-            }).ToList();
+            });
         }
 
         protected virtual List<TItem> FilterItems(List<TItem> items)
@@ -245,11 +253,11 @@ namespace Serenity
                 return items;
 
             var key = FilterValue.ToString();
-            return items.Where(x =>
+            return items.Filter(x =>
             {
                 var itemKey = ((dynamic)x)[FilterField] ?? ReflectionUtils.GetPropertyValue(x, FilterField);
                 return itemKey != null && ((object)itemKey).ToString() == key;
-            }).ToList();
+            });
         }
 
         protected virtual object GetCascadeFromValue(Widget parent)
@@ -283,12 +291,14 @@ namespace Serenity
             if (options.MinimumResultsForSearch != null)
                 opt.MinimumResultsForSearch = options.MinimumResultsForSearch.Value;
 
-            if (options.InplaceAdd)
+            if (options.InplaceAdd && (options.InplaceAddPermission == null || Q.Authorization.HasPermission(options.InplaceAddPermission)))
                 opt.CreateSearchChoice = GetCreateSearchChoice();
 
             if (options.Multiple)
                 opt.Multiple = true;
-
+            
+            opt.AllowClear = options.AllowClear ?? true;
+            
             return opt;
         }
 

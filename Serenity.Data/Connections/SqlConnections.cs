@@ -1,22 +1,48 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data;
 using System.Data.Common;
+using System.Reflection;
+#if !COREFX
+using System.Configuration;
+#else
+using Microsoft.Extensions.Configuration;
+#endif
 
 namespace Serenity.Data
 {
+#if COREFX
+    public static class DbProviderFactories
+    {
+        internal static readonly Dictionary<string, Func<DbProviderFactory>> _configs = new Dictionary<string, Func<DbProviderFactory>>();
+
+        public static DbProviderFactory GetFactory(string providerInvariantName)
+        {
+            if (_configs.ContainsKey(providerInvariantName))
+                return _configs[providerInvariantName]();
+
+            throw new ArgumentOutOfRangeException("providerInvariantName");
+        }
+
+        public static void RegisterFactory(string providerInvariantName, DbProviderFactory factory)
+        {
+            _configs[providerInvariantName] = () => factory;
+        }
+    }
+#endif
+
     public static class SqlConnections
     {
         private static Dictionary<string, ConnectionStringInfo> connections = new Dictionary<string, ConnectionStringInfo>();
         private static Dictionary<string, DbProviderFactory> factories = new Dictionary<string, DbProviderFactory>();
-        
+
         public static DbProviderFactory GetFactory(string providerName)
         {
             DbProviderFactory factory;
             if (!factories.TryGetValue(providerName, out factory))
             {
                 var newFactories = new Dictionary<string, DbProviderFactory>(factories);
+                DbProviderFactories.GetFactory(providerName);
                 factory = newFactories[providerName] = DbProviderFactories.GetFactory(providerName);
                 factories = newFactories;
             }
@@ -30,14 +56,24 @@ namespace Serenity.Data
             if (!connections.TryGetValue(connectionKey, out connection))
             {
                 var newConnections = new Dictionary<string, ConnectionStringInfo>(connections);
+#if COREFX
+                var configuration = Dependency.TryResolve<IConfiguration>();
+                if (configuration == null)
+                    return null;
+
+                var connectionString = configuration.GetValue<string>("Data:" + connectionKey + ":ConnectionString");
+                var providerName = configuration.GetValue<string>("Data:" + connectionKey + ":ProviderName") ?? "System.Data.SqlClient";
+                connection = newConnections[connectionKey] = new ConnectionStringInfo(connectionKey, 
+                    connectionString, providerName);
+#else
                 var connectionSetting = ConfigurationManager.ConnectionStrings[connectionKey];
                 if (connectionSetting == null)
                     return null;
 
-                var factory = GetFactory(connectionSetting.ProviderName);
-
                 connection = newConnections[connectionKey] = new ConnectionStringInfo(connectionKey, connectionSetting.ConnectionString, 
-                    connectionSetting.ProviderName, factory);
+                    connectionSetting.ProviderName);
+#endif
+
                 connections = newConnections;
             }
 
@@ -101,7 +137,7 @@ namespace Serenity.Data
 
         public static IDbConnection NewFor<TClass>()
         {
-            var attr = typeof(TClass).GetAttribute<ConnectionKeyAttribute>();
+            var attr = typeof(TClass).GetCustomAttribute<ConnectionKeyAttribute>();
             if (attr == null)
                 throw new ArgumentOutOfRangeException("Type has no ConnectionKey attribute!", typeof(TClass).FullName);
 
@@ -111,7 +147,7 @@ namespace Serenity.Data
         public static void SetConnection(string connectionKey, string connectionString, string providerName)
         {
             var newConnections = new Dictionary<string, ConnectionStringInfo>(connections);
-            newConnections[connectionKey] = new ConnectionStringInfo(connectionKey, connectionString, providerName, GetFactory(providerName));
+            newConnections[connectionKey] = new ConnectionStringInfo(connectionKey, connectionString, providerName);
             connections = newConnections;
         }
 

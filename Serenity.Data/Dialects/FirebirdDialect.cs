@@ -1,10 +1,45 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace Serenity.Data
 {
     public class FirebirdDialect : ISqlDialect
     {
         public static readonly FirebirdDialect Instance = new FirebirdDialect();
+
+        private static HashSet<string> keywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "!<", "^<", "^=", "^>", ",", ":=", "!=", "!>", "(", ")", "<", "<=", "<>", "=", ">", ">=", "||", "~<", "~=", "~>",
+            "ABS", "ACCENT", "ACOS", "ACTION", "ACTIVE", "ADD", "ADMIN", "AFTER", "ALL", "ALTER", "ALWAYS", "AND", "ANY",
+            "AS", "ASC", "ASCENDING", "ASCII_CHAR", "ASCII_VAL", "ASIN", "AT", "ATAN", "ATAN2", "AUTO", "AUTONOMOUS", "AVG",
+            "BACKUP", "BEFORE", "BEGIN", "BETWEEN", "BIGINT", "BIN_AND", "BIN_NOT", "BIN_OR", "BIN_SHL", "BIN_SHR", "BIN_XOR",
+            "BIT_LENGTH", "BLOB", "BLOCK", "BOTH", "BREAK", "BY", "CALLER", "CASCADE", "CASE", "CAST", "CEIL", "CEILING", "CHAR",
+            "CHAR_LENGTH", "CHAR_TO_UUID", "CHARACTER", "CHARACTER_LENGTH", "CHECK", "CLOSE", "COALESCE", "COLLATE", "COLLATION",
+            "COLUMN", "COMMENT", "COMMIT", "COMMITTED", "COMMON", "COMPUTED", "CONDITIONAL", "CONNECT", "CONSTRAINT", "CONTAINING",
+            "COS", "COSH", "COT", "COUNT", "CREATE", "CROSS", "CSTRING", "CURRENT", "CURRENT_CONNECTION", "CURRENT_DATE", "CURRENT_ROLE",
+            "CURRENT_TIME", "CURRENT_TIMESTAMP", "CURRENT_TRANSACTION", "CURRENT_USER", "CURSOR", "DATA", "DATABASE", "DATE", "DATEADD",
+            "DATEDIFF", "DAY", "DEC", "DECIMAL", "DECLARE", "DECODE", "DEFAULT", "DELETE", "DELETING", "DESC", "DESCENDING", "DESCRIPTOR",
+            "DIFFERENCE", "DISCONNECT", "DISTINCT", "DO", "DOMAIN", "DOUBLE", "DROP", "ELSE", "END", "ENTRY_POINT", "ESCAPE", "EXCEPTION",
+            "EXECUTE", "EXISTS", "EXIT", "EXP", "EXTERNAL", "EXTRACT", "FETCH", "FILE", "FILTER", "FIRST", "FIRSTNAME", "FLOAT", "FLOOR",
+            "FOR", "FOREIGN", "FREE_IT", "FROM", "FULL", "FUNCTION", "GDSCODE", "GEN_ID", "GEN_UUID", "GENERATED", "GENERATOR", "GLOBAL",
+            "GRANT", "GRANTED", "GROUP", "HASH", "HAVING", "HOUR", "IF", "IGNORE", "IIF", "IN", "INACTIVE", "INDEX", "INNER", "INPUT_TYPE",
+            "INSENSITIVE", "INSERT", "INSERTING", "INT", "INTEGER", "INTO", "IS", "ISOLATION", "JOIN", "KEY", "LAST", "LASTNAME", "LEADING",
+            "LEAVE", "LEFT", "LENGTH", "LEVEL", "LIKE", "LIMBO", "LIST", "LN", "LOCK", "LOG", "LOG10", "LONG", "LOWER", "LPAD", "MANUAL",
+            "MAPPING", "MATCHED", "MATCHING", "MAX", "MAXIMUM_SEGMENT", "MAXVALUE", "MERGE", "MIDDLENAME", "MILLISECOND", "MIN", "MINUTE",
+            "MINVALUE", "MOD", "MODULE_NAME", "MONTH", "NAMES", "NATIONAL", "NATURAL", "NCHAR", "NEXT", "NO", "NOT", "NULL", "NULLIF", "NULLS",
+            "NUMERIC", "OCTET_LENGTH", "OF", "ON", "ONLY", "OPEN", "OPTION", "OR", "ORDER", "OS_NAME", "OUTER", "OUTPUT_TYPE", "OVERFLOW",
+            "OVERLAY", "PAD", "PAGE", "PAGE_SIZE", "PAGES", "PARAMETER", "PASSWORD", "PI", "PLACING", "PLAN", "POSITION", "POST_EVENT", "POWER",
+            "PRECISION", "PRESERVE", "PRIMARY", "PRIVILEGES", "PROCEDURE", "PROTECTED", "RAND", "RDB$DB_KEY", "READ", "REAL", "RECORD_VERSION",
+            "RECREATE", "RECURSIVE", "REFERENCES", "RELEASE", "REPLACE", "REQUESTS", "RESERV", "RESERVING", "RESTART", "RESTRICT", "RETAIN",
+            "RETURNING", "RETURNING_VALUES", "RETURNS", "REVERSE", "REVOKE", "RIGHT", "ROLE", "ROLLBACK", "ROUND", "ROW_COUNT", "ROWS",
+            "RPAD", "SAVEPOINT", "SCALAR_ARRAY", "SCHEMA", "SECOND", "SEGMENT", "SELECT", "SENSITIVE", "SEQUENCE", "SET", "SHADOW", "SHARED",
+            "SIGN", "SIMILAR", "SIN", "SINGULAR", "SINH", "SIZE", "SKIP", "SMALLINT", "SNAPSHOT", "SOME", "SORT", "SOURCE", "SPACE", "SQLCODE",
+            "SQLSTATE", "SQRT", "STABILITY", "START", "STARTING", "STARTS", "STATEMENT", "STATISTICS", "SUB_TYPE", "SUBSTRING", "SUM", "SUSPEND",
+            "TABLE", "TAN", "TANH", "TEMPORARY", "THEN", "TIME", "TIMEOUT", "TIMESTAMP", "TO", "TRAILING", "TRANSACTION", "TRIGGER", "TRIM",
+            "TRUNC", "TWO_PHASE", "TYPE", "UNCOMMITTED", "UNDO", "UNION", "UNIQUE", "UPDATE", "UPDATING", "UPPER", "USER", "USING", "UUID_TO_CHAR",
+            "VALUE", "VALUES", "VARCHAR", "VARIABLE", "VARYING", "VIEW", "WAIT", "WEEK", "WEEKDAY", "WHEN", "WHERE", "WHILE", "WITH", "WORK",
+            "WRITE", "YEAR", "YEARDAY"
+        };
 
         public virtual bool CanUseOffsetFetch
         {
@@ -22,7 +57,7 @@ namespace Serenity.Data
             }
         }
 
-        public bool CanUseSkipKeyword
+        public virtual bool CanUseSkipKeyword
         {
             get
             {
@@ -30,7 +65,7 @@ namespace Serenity.Data
             }
         }
 
-        public char CloseQuote
+        public virtual char CloseQuote
         {
             get
             {
@@ -38,7 +73,7 @@ namespace Serenity.Data
             }
         }
 
-        public string ConcatOperator
+        public virtual string ConcatOperator
         {
             get
             {
@@ -46,7 +81,7 @@ namespace Serenity.Data
             }
         }
 
-        public string DateFormat
+        public virtual string DateFormat
         {
             get
             {
@@ -54,7 +89,7 @@ namespace Serenity.Data
             }
         }
 
-        public string DateTimeFormat
+        public virtual string DateTimeFormat
         {
             get
             {
@@ -62,7 +97,7 @@ namespace Serenity.Data
             }
         }
 
-        public bool IsLikeCaseSensitive
+        public virtual bool IsLikeCaseSensitive
         {
             get
             {
@@ -70,7 +105,7 @@ namespace Serenity.Data
             }
         }
 
-        public bool MultipleResultsets
+        public virtual bool MultipleResultsets
         {
             get
             {
@@ -78,7 +113,15 @@ namespace Serenity.Data
             }
         }
 
-        public bool NeedsExecuteBlockStatement
+        public virtual bool NeedsBoolWorkaround
+        {
+            get
+            {
+                return false;
+            }
+        }
+
+        public virtual bool NeedsExecuteBlockStatement
         {
             get
             {
@@ -102,7 +145,7 @@ namespace Serenity.Data
             }
         }
 
-        public char OpenQuote
+        public virtual char OpenQuote
         {
             get
             {
@@ -110,12 +153,12 @@ namespace Serenity.Data
             }
         }
 
-        public string QuoteColumnAlias(string s)
+        public virtual string QuoteColumnAlias(string s)
         {
             return QuoteIdentifier(s);
         }
 
-        public string QuoteIdentifier(string s)
+        public virtual string QuoteIdentifier(string s)
         {
             if (string.IsNullOrEmpty(s))
                 return s;
@@ -123,10 +166,13 @@ namespace Serenity.Data
             if (s.StartsWith("\"") && s.EndsWith("\""))
                 return s;
 
-            return '"' + s + '"';
+            if (keywords.Contains(s) || s.IndexOf(' ') >= 0 || s.StartsWith("_"))
+                return '"' + s + '"';
+
+            return s;
         }
 
-        public string QuoteUnicodeString(string s)
+        public virtual string QuoteUnicodeString(string s)
         {
             if (s.IndexOf('\'') >= 0)
                 return "'" + s.Replace("'", "''") + "'";
@@ -134,7 +180,7 @@ namespace Serenity.Data
             return "'" + s + "'";
         }
 
-        public string ScopeIdentityExpression
+        public virtual string ScopeIdentityExpression
         {
             get
             {
@@ -142,7 +188,15 @@ namespace Serenity.Data
             }
         }
 
-        public string SkipKeyword
+        public virtual string ServerType
+        {
+            get
+            {
+                return "Firebird";
+            }
+        }
+
+        public virtual string SkipKeyword
         {
             get
             {
@@ -150,7 +204,7 @@ namespace Serenity.Data
             }
         }
 
-        public string TakeKeyword
+        public virtual string TakeKeyword
         {
             get
             {
@@ -158,7 +212,7 @@ namespace Serenity.Data
             }
         }
 
-        public string TimeFormat
+        public virtual string TimeFormat
         {
             get
             {
@@ -166,7 +220,7 @@ namespace Serenity.Data
             }
         }
 
-        public bool UseDateTime2
+        public virtual bool UseDateTime2
         {
             get
             {
@@ -174,7 +228,7 @@ namespace Serenity.Data
             }
         }
 
-        public bool UseReturningIdentity
+        public virtual bool UseReturningIdentity
         {
             get
             {
@@ -182,7 +236,7 @@ namespace Serenity.Data
             }
         }
 
-        public bool UseReturningIntoVar
+        public virtual bool UseReturningIntoVar
         {
             get
             {
@@ -190,7 +244,7 @@ namespace Serenity.Data
             }
         }
 
-        public bool UseScopeIdentity
+        public virtual bool UseScopeIdentity
         {
             get
             {
@@ -198,7 +252,7 @@ namespace Serenity.Data
             }
         }
 
-        public bool UseTakeAtEnd
+        public virtual bool UseTakeAtEnd
         {
             get
             {
@@ -206,7 +260,7 @@ namespace Serenity.Data
             }
         }
 
-        public bool UseRowNum
+        public virtual bool UseRowNum
         {
             get
             {
@@ -214,7 +268,7 @@ namespace Serenity.Data
             }
         }
 
-        public char ParameterPrefix { get { return '@'; } }
+        public virtual char ParameterPrefix { get { return '@'; } }
 
     }
 }

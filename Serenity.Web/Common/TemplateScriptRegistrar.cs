@@ -1,18 +1,13 @@
-﻿using Serenity.Web.MvcFakes;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
-using System.Web;
-using System.Web.Mvc;
-using System.Web.Routing;
-using System.Web.UI;
+using System.Web.Hosting;
 
 namespace Serenity.Web
 {
     public class TemplateScriptRegistrar
     {
-        const string TemplateSuffix = ".Template.html";
+        private static readonly string[] TemplateSuffixes = new[] { ".Template.html", ".ts.html" };
 
         private ConcatenatedScript bundle;
         private Dictionary<string, TemplateScript> scriptByKey = new Dictionary<string, TemplateScript>(StringComparer.OrdinalIgnoreCase);
@@ -21,15 +16,36 @@ namespace Serenity.Web
         {
             string key = Path.GetFileName(filename);
 
-            if (!key.EndsWith(TemplateSuffix, StringComparison.OrdinalIgnoreCase))
-                return null;
+            foreach (var suffix in TemplateSuffixes)
+                if (key.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    key = key.Substring(0, key.Length - suffix.Length);
 
-            return key.Substring(0, key.Length - TemplateSuffix.Length);
+                    var modulePrefix = "modules" + Path.DirectorySeparatorChar;
+                    var moduleIdx = filename.IndexOf(modulePrefix, StringComparison.OrdinalIgnoreCase);
+                    if (moduleIdx >= 0)
+                    {
+                        var moduleEnd = filename.IndexOf(Path.DirectorySeparatorChar, moduleIdx + modulePrefix.Length);
+                        if (moduleEnd >= 0)
+                        {
+                            var module = filename.Substring(moduleIdx + modulePrefix.Length, moduleEnd - moduleIdx - modulePrefix.Length);
+                            if (!key.StartsWith(module + ".", StringComparison.Ordinal))
+                                return module + "." + key;
+                        }
+                    }
+
+                    return key;
+                }
+
+            return null;
         }
 
-        private void WatchForChanges(string rootUrl)
+        private void WatchForChanges(string path)
         {
-            var sw = new FileSystemWatcher(HttpContext.Current.Server.MapPath(rootUrl));
+            if (path.StartsWith("~/"))
+                path = HostingEnvironment.MapPath(path);
+
+            var sw = new FileSystemWatcher(path);
             sw.IncludeSubdirectories = true;
             sw.NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite;
             sw.Changed += (s, e) => Changed(e.Name);
@@ -60,12 +76,14 @@ namespace Serenity.Web
 
             foreach (var rootUrl in rootUrls)
             {
-                var rootPath = HttpContext.Current.Server.MapPath(rootUrl);
+                var path = rootUrl;
+                if (path.StartsWith("~/"))
+                    path = HostingEnvironment.MapPath(path);
 
-                if (!Directory.Exists(rootPath))
+                if (!Directory.Exists(path))
                     continue;
 
-                foreach (var file in Directory.EnumerateFiles(rootPath, "*.html", SearchOption.AllDirectories))
+                foreach (var file in Directory.EnumerateFiles(path, "*.html", SearchOption.AllDirectories))
                 {
                     var key = GetKey(file);
                     if (key == null)

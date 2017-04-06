@@ -1,13 +1,8 @@
-﻿using Newtonsoft.Json;
-using Serenity.ComponentModel;
-using Serenity.Data;
-using Serenity.Services;
+﻿using Serenity.Services;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using System.Text;
-using System.Web.Mvc;
 
 namespace Serenity.CodeGeneration
 {
@@ -36,7 +31,9 @@ namespace Serenity.CodeGeneration
                 memberType == typeof(UInt64) ||
                 memberType == typeof(Single) ||
                 memberType == typeof(Double) ||
-                memberType == typeof(Decimal))
+                memberType == typeof(Decimal) ||
+                memberType == typeof(Byte) ||
+                memberType == typeof(SByte))
             {
                 sb.Append("number");
                 return;
@@ -50,6 +47,7 @@ namespace Serenity.CodeGeneration
 
             if (memberType == typeof(DateTime) ||
                 memberType == typeof(TimeSpan) ||
+                memberType == typeof(DateTimeOffset) ||
                 memberType == typeof(Guid))
             {
                 sb.Append("string");
@@ -81,7 +79,7 @@ namespace Serenity.CodeGeneration
                 return;
             }
 
-            if (memberType.IsGenericType &&
+            if (memberType.GetIsGenericType() &&
                 (memberType.GetGenericTypeDefinition() == typeof(List<>) ||
                 memberType.GetGenericTypeDefinition() == typeof(HashSet<>)))
             {
@@ -90,7 +88,7 @@ namespace Serenity.CodeGeneration
                 return;
             }
 
-            if (memberType.IsGenericType &&
+            if (memberType.GetIsGenericType() &&
                 memberType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
             {
                 sb.Append("{ [key: ");

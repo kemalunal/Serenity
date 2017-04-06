@@ -2,7 +2,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using jQueryApi;
-using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace Serenity
@@ -18,5 +17,7 @@ namespace Serenity
         public Action<jQueryObject> Element { get; set; }
         public Action<TWidget> Init { get; set; }
         public Action<QuickFilterArgs<TWidget>> Handler { get; set; }
+        public bool Seperator { get; set; }
+        public string CssClass { get; set; }
     }
 }

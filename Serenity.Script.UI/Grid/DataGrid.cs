@@ -5,7 +5,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Data.WebStorage;
 using System.Html;
-using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace Serenity
@@ -44,7 +43,7 @@ namespace Serenity
 
             this.element.AddClass("s-DataGrid").Html("");
             this.element.AddClass("s-" + this.GetType().Name);
-            this.element.AddClass("require-layout").Bind("layout", delegate
+            this.element.AddClass("require-layout").Bind("layout." + this.uniqueName, delegate
             {
                 self.Layout();
             });
@@ -81,7 +80,7 @@ namespace Serenity
             {
                 initialSettings = GetCurrentSettings();
                 RestoreSettings();
-                InitialPopulate();
+                Window.SetTimeout(InitialPopulate, 0);
             }
         }
 
@@ -138,7 +137,7 @@ namespace Serenity
         {
             var list = new List<QuickFilter<Widget, object>>();
 
-            foreach (var column in this.allColumns.Where(x => 
+            foreach (var column in this.allColumns.Filter(x => 
                 x.SourceItem != null && x.SourceItem.QuickFilter == true))
             {
                 var item = column.SourceItem;
@@ -147,14 +146,23 @@ namespace Serenity
 
                 var filteringType = FilteringTypeRegistry.Get(item.FilteringType ?? "String");
 
-                if (filteringType == typeof(DateFiltering) || filteringType == typeof(DateTimeFiltering))
+                if (filteringType == typeof(DateFiltering))
                 {
                     quick = DateRangeQuickFilter(item.Name, Q.TryGetText(item.Title) ?? item.Title ?? item.Name)
                         .As<QuickFilter<Widget, object>>();
                 }
+                else if (filteringType == typeof(DateTimeFiltering))
+                {
+                    quick = DateTimeRangeQuickFilter(item.Name, Q.TryGetText(item.Title) ?? item.Title ?? item.Name)
+                        .As<QuickFilter<Widget, object>>();
+                }
                 else if (filteringType == typeof(BooleanFiltering))
                 {
-                    quick = BooleanQuickFilter(item.Name, Q.TryGetText(item.Title) ?? item.Title ?? item.Name)
+                    var q = item.QuickFilterParams ?? new JsDictionary();
+                    var f = item.FilteringParams ?? new JsDictionary();
+
+                    quick = BooleanQuickFilter(item.Name, Q.TryGetText(item.Title) ?? item.Title ?? item.Name,
+                        (q["trueText"] ?? f["trueText"]).As<string>(), (q["falseText"] ?? f["falseText"]).As<string>())
                         .As<QuickFilter<Widget, object>>();
                 }
                 else
@@ -172,6 +180,11 @@ namespace Serenity
                     else
                         continue;
                 }
+
+                if (item.QuickFilterSeparator == true)
+                    quick.Seperator = true;
+
+                quick.CssClass = item.QuickFilterCssClass;
 
                 list.Add(quick);
             }
@@ -307,8 +320,8 @@ namespace Serenity
                     var self = this;
                     if (this.filterBar != null)
                     {
-                        filterBar.Store = new FilterStore(this.allColumns.Where(x => 
-                            x.SourceItem != null && x.SourceItem.NotFilterable != true).Select(x => x.SourceItem));
+                        filterBar.Store = new FilterStore(this.allColumns.Filter(x => 
+                            x.SourceItem != null && x.SourceItem.NotFilterable != true).Map(x => x.SourceItem));
                         filterBar.Store.Changed += (s, e) =>
                         {
                             if (restoringSettings <= 0)
@@ -319,7 +332,7 @@ namespace Serenity
                         };
                     }
 
-                    var visibleColumns = this.allColumns.Where(x => x.Visible != false).ToList();
+                    var visibleColumns = this.allColumns.Filter(x => x.Visible != false);
 
                     if (this.slickGrid != null)
                         this.slickGrid.SetColumns(visibleColumns);
@@ -342,7 +355,7 @@ namespace Serenity
             else
             {
                 this.allColumns = GetColumns();
-                visibleColumns = PostProcessColumns(this.allColumns).Where(x => x.Visible != false).ToList();
+                visibleColumns = PostProcessColumns(this.allColumns).Filter(x => x.Visible != false);
             }
 
             var slickOptions = GetSlickOptions();
@@ -575,10 +588,6 @@ namespace Serenity
         protected virtual void SetIncludeColumnsParameter()
         {
             var include = new JsDictionary<string, bool>();
-            if (!Script.IsNullOrUndefined(view.Params.IncludeColumns))
-                foreach (var key in (string[])view.Params.IncludeColumns)
-                    include[key] = true;
-
             GetIncludeColumns(include);
 
             List<string> array = null;
@@ -587,7 +596,6 @@ namespace Serenity
                 array = new List<string>();
                 foreach (var key in include.Keys)
                     array.Add(key);
-
             }
 
             view.Params.IncludeColumns = array;
@@ -625,7 +633,7 @@ namespace Serenity
         {
             if (slickGrid != null && slickGrid.GetColumns().Count > 0)
             {
-                var columns = slickGrid.GetColumns().Where(x => Script.IsValue(x.SortOrder) && x.SortOrder != 0).ToList();
+                var columns = slickGrid.GetColumns().Filter(x => Script.IsValue(x.SortOrder) && x.SortOrder != 0);
                 if (columns.Count > 0)
                 {
                     columns.Sort((x, y) => Math.Abs(x.SortOrder).CompareTo(Math.Abs(y.SortOrder)));
@@ -671,8 +679,8 @@ namespace Serenity
 
             if (!IsAsyncWidget())
             {
-                filterBar.Store = new FilterStore(this.allColumns.Where(x => 
-                    x.SourceItem != null && x.SourceItem.NotFilterable != true).Select(x => x.SourceItem));
+                filterBar.Store = new FilterStore(this.allColumns.Filter(x => 
+                    x.SourceItem != null && x.SourceItem.NotFilterable != true).Map(x => x.SourceItem));
                 filterBar.Store.Changed += (s, e) =>
                 {
                     if (restoringSettings <= 0)
@@ -1041,10 +1049,16 @@ namespace Serenity
                 quickFiltersDiv = J("<div/>").AddClass("quick-filters-bar").AppendTo(toolbar.Element);
             }
 
+            if (opt.Seperator)
+                AddFilterSeparator();
+
             var quickFilter = J("<div class='quick-filter-item'><span class='quick-filter-label'></span></div>")
                 .AppendTo(quickFiltersDiv)
                 .Children().Text(opt.Title ?? DetermineText(pre => pre + opt.Field) ?? opt.Field)
                 .Parent();
+
+            if (!string.IsNullOrEmpty(opt.CssClass))
+                quickFilter.AddClass(opt.CssClass);
 
             var widget = Widget.CreateOfType(opt.Type, e =>
             {
@@ -1085,32 +1099,16 @@ namespace Serenity
                     quickFilter.ToggleClass("quick-filter-active", args.Active);
 
                     if (!args.Handled)
-                    {
-                        if (jQuery.IsArray(value))
-                        {
-                            if (value.As<object[]>().Length > 0)
-                                request.Criteria &= new Criteria(opt.Field).In(value.As<object[]>());
-                        }
-                        else
-                            request.EqualityFilter[opt.Field] = value;
-                    }
+                        request.EqualityFilter[opt.Field] = value;
                 }
                 else
                 {
-                    if (jQuery.IsArray(value))
-                    {
-                        if (value.As<object[]>().Length > 0)
-                            request.Criteria &= new Criteria(opt.Field).In(value.As<object[]>());
-                    }
-                    else
-                        request.EqualityFilter[opt.Field] = value;
-
+                    request.EqualityFilter[opt.Field] = value;
                     quickFilter.ToggleClass("quick-filter-active", active);
-
                 }
             };
 
-            widget.Change(e =>
+            widget.ChangeSelect2(e =>
             {
                 this.QuickFilterChange(e);
             });
@@ -1154,19 +1152,88 @@ namespace Serenity
                 },
                 Handler = args =>
                 {
-                    args.Active =
-                        !string.IsNullOrEmpty(args.Widget.Value) ||
-                        !string.IsNullOrEmpty(end.Value);
+                    bool active1 = !Q.IsTrimmedEmpty(args.Widget.Value);
+                    bool active2 = !Q.IsTrimmedEmpty(end.Value);
 
-                    if (!string.IsNullOrEmpty(args.Widget.Value))
+                    if (active1 && Q.IsFalse(Q.ParseDate(args.Widget.Element.GetValue())))
+                    {
+                        active1 = false;
+                        Q.NotifyWarning(Q.Text("Validation.DateInvalid"));
+                        args.Widget.Element.Value("");
+                    }
+
+                    if (active2 && Q.IsFalse(Q.ParseDate(end.Element.GetValue())))
+                    {
+                        active2 = false;
+                        Q.NotifyWarning(Q.Text("Validation.DateInvalid"));
+                        end.Element.Value("");
+                    }
+
+                    args.Active = active1 || active2;
+
+                    if (active1)
                         args.Request.Criteria &= new Criteria(args.Field) >= args.Widget.Value;
 
-                    if (!string.IsNullOrEmpty(end.Value))
+                    if (active2)
                     {
                         var next = new JsDate(end.ValueAsDate.ValueOf());
                         next.SetDate(next.GetDate() + 1);
                         args.Request.Criteria &= new Criteria(args.Field) < Q.FormatDate(next, "yyyy-MM-dd");
                     }
+                }
+            };
+        }
+
+        public DateTimeEditor AddDateTimeRangeFilter(string field, string title = null)
+        {
+            return (DateTimeEditor)AddQuickFilter(DateTimeRangeQuickFilter(field, title));
+        }
+
+        public QuickFilter<DateTimeEditor, DateTimeEditorOptions> DateTimeRangeQuickFilter(string field, string title = null)
+        {
+            DateTimeEditor end = null;
+
+            return new QuickFilter<DateTimeEditor, DateTimeEditorOptions>
+            {
+                Field = field,
+                Type = typeof(DateTimeEditor),
+                Title = title,
+                Element = e1 =>
+                {
+                    end = Widget.Create<DateTimeEditor>(element: e2 => e2.InsertAfter(e1));
+                    end.Element.Change(x => e1.TriggerHandler("change"));
+                    J("<span/>").AddClass("range-separator").Text("-").InsertAfter(e1);
+                },
+                Init = i =>
+                {
+                    i.Element.Parent().Find(".time").Change(x => i.Element.TriggerHandler("change"));
+                },
+                Handler = args =>
+                {
+                    bool active1 = !Q.IsTrimmedEmpty(args.Widget.Value);
+                    bool active2 = !Q.IsTrimmedEmpty(end.Value);
+
+                    if (active1 && Q.IsFalse(Q.ParseDate(args.Widget.Element.GetValue())))
+                    {
+                        active1 = false;
+                        Q.NotifyWarning(Q.Text("Validation.DateInvalid"));
+                        args.Widget.Element.Value("");
+                    }
+
+                    if (active2 && Q.IsFalse(Q.ParseDate(end.Element.GetValue())))
+                    {
+                        active2 = false;
+                        Q.NotifyWarning(Q.Text("Validation.DateInvalid"));
+                        end.Element.Value("");
+                    }
+
+                    args.Active = active1 || active2;
+
+                    if (active1)
+                        args.Request.Criteria &= new Criteria(args.Field) >= args.Widget.Value;
+
+                    if (active2)
+                        args.Request.Criteria &= new Criteria(args.Field) <= end.Value;
                 }
             };
         }
@@ -1221,7 +1288,7 @@ namespace Serenity
 
             var path = Window.Location.Pathname;
             if (!string.IsNullOrEmpty(path))
-                key += string.Join("/", path.Substr(1).Split('/').Take(2).ToArray()) + ":";
+                key += string.Join("/", path.Substr(1).Split('/').Slice(0, 2)) + ":";
 
             key += this.GetType().FullName;
 
@@ -1231,6 +1298,25 @@ namespace Serenity
         protected virtual GridPersistanceFlags GridPersistanceFlags()
         {
             return new GridPersistanceFlags();
+        }
+
+        private bool CanShowColumn(SlickColumn column)
+        {
+            if (column == null)
+                return false;
+
+            var item = column.SourceItem;
+
+            if (item == null)
+                return true;
+
+            if (item.FilterOnly == true)
+                return false;
+
+            if (item.ReadPermission == null)
+                return true;
+
+            return Q.Authorization.HasPermission(item.ReadPermission);
         }
 
         protected virtual void RestoreSettings(PersistedGridSettings settings = null, GridPersistanceFlags flags = null)
@@ -1278,7 +1364,7 @@ namespace Serenity
                             if (x.ID != null && x.Visible == true)
                             {
                                 var column = colById[x.ID];
-                                if (column != null && (column.SourceItem == null || column.SourceItem.FilterOnly != true))
+                                if (CanShowColumn(column))
                                 {
                                     column.Visible = true;
                                     newColumns.Add(column);
@@ -1294,7 +1380,7 @@ namespace Serenity
                             }
 
                         this.allColumns = newColumns;
-                        columns = this.allColumns.Where(x => x.Visible == true).ToList();
+                        columns = this.allColumns.Filter(x => x.Visible == true);
                     }
 
                     if (flags.ColumnWidths != false)
@@ -1313,9 +1399,10 @@ namespace Serenity
                     {
                         updateColById(columns);
                         var list = new List<SlickColumnSort>();
-                        foreach (var x in settings.Columns
-                            .Where(x => x.ID != null && (x.Sort ?? 0) != 0)
-                            .OrderBy(z => Math.Abs(z.Sort.Value)))
+                        var sortColumns = settings.Columns.Filter(x => x.ID != null && (x.Sort ?? 0) != 0);
+                        sortColumns.Sort((a, b) => a.Sort.Value - b.Sort.Value);
+
+                        foreach (var x in sortColumns)
                         {
                             var column = colById[x.ID];
                             if (column != null)
@@ -1327,8 +1414,8 @@ namespace Serenity
                                 });
                             }
                         }
-                        this.view.SortBy = list.Select(x =>
-                            x.ColumnId + (x.SortAsc == false ? " DESC" : "")).ToArray();
+                        this.view.SortBy = list.Map(x =>
+                            x.ColumnId + (x.SortAsc == false ? " DESC" : "")).As<string[]>();
 
                         this.slickGrid.SetSortColumns(list);
                     }
@@ -1397,7 +1484,7 @@ namespace Serenity
 
                     if (flags.SortColumns != false)
                     {
-                        var sort = sortColumns.IndexOf(x => x.ColumnId == column.Identifier);
+                        var sort = Q.IndexOf(sortColumns, x => x.ColumnId == column.Identifier);
                         p.Sort = sort >= 0 ? (sortColumns[sort].SortAsc != false ? (sort + 1) : (-sort - 1)) : 0;
                     }
 
@@ -1412,7 +1499,7 @@ namespace Serenity
                 this.filterBar != null &&
                 this.filterBar.Store != null)
             {
-                settings.FilterItems = this.filterBar.Store.Items.ToList();
+                settings.FilterItems = this.filterBar.Store.Items.Clone();
             }
 
             return settings;

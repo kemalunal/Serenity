@@ -14,12 +14,9 @@ namespace Serenity.Services
 
         public bool ActivateFor(Row row)
         {
-            var attr = row.GetType().GetCustomAttributes<UniqueConstraintAttribute>();
+            var attr = row.GetType().GetCustomAttributes<UniqueConstraintAttribute>()
+                .Where(x => x.CheckBeforeSave);
 
-            if (!attr.Any())
-                return false;
-
-            attr = attr.Where(x => x.CheckBeforeSave);
             if (!attr.Any())
                 return false;
 
@@ -27,7 +24,7 @@ namespace Serenity.Services
             return true;
         }
 
-        public override void OnValidateRequest(ISaveRequestHandler handler)
+        public override void OnBeforeSave(ISaveRequestHandler handler)
         {
             if (attrList == null)
                 return;

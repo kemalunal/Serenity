@@ -32,39 +32,53 @@ namespace Serenity
 
             var categoriesDiv = div;
 
+            var useCategories = options.UseCategories &&
+                Q.Any(items, x => !string.IsNullOrEmpty(x.Category));
+
             if (options.UseCategories)
             {
                 var linkContainer = J("<div/>")
                     .AddClass("category-links");
 
                 categoryIndexes = CreateCategoryLinks(linkContainer, items);
-                
+
                 if (categoryIndexes.Count > 1)
                     linkContainer.AppendTo(div);
                 else
                     linkContainer.Find("a.category-link").Unbind("click", CategoryLinkClick).Remove();
-
-                categoriesDiv = J("<div/>")
-                    .AddClass("categories")
-                    .AppendTo(div);
             }
-            
-            var fieldContainer = categoriesDiv;
+
+            categoriesDiv = J("<div/>")
+                .AddClass("categories")
+                .AppendTo(div);
+
+            jQueryObject fieldContainer;
+            if (useCategories)
+            {
+                fieldContainer = categoriesDiv;
+            }
+            else
+            { 
+                fieldContainer = J("<div/>")
+                    .AddClass("category")
+                    .AppendTo(categoriesDiv);
+            }
 
             string priorCategory = null;
 
             for (int i = 0; i < items.Count; i++)
             {
                 var item = items[i];
-                if (options.UseCategories &&
-                    priorCategory != item.Category)
+                var category = (item.Category ?? options.DefaultCategory ?? "");
+                if (useCategories && priorCategory != category)
                 {
-                    var categoryDiv = CreateCategoryDiv(categoriesDiv, categoryIndexes, item.Category);
+                    var categoryDiv = CreateCategoryDiv(categoriesDiv, categoryIndexes, category, 
+                        item.Collapsible != true ? (bool?)null : item.Collapsed ?? false);
 
                     if (priorCategory == null)
                         categoryDiv.AddClass("first-category");
 
-                    priorCategory = item.Category;
+                    priorCategory = category;
                     fieldContainer = categoryDiv;
                 }
 
@@ -90,13 +104,14 @@ namespace Serenity
             base.Destroy();
         }
 
-        private jQueryObject CreateCategoryDiv(jQueryObject categoriesDiv, JsDictionary<string, int> categoryIndexes, string category)
+        private jQueryObject CreateCategoryDiv(jQueryObject categoriesDiv, JsDictionary<string, int> categoryIndexes, string category,
+            bool? collapsed)
         {
             var categoryDiv = J("<div/>")
                 .AddClass("category")
                 .AppendTo(categoriesDiv);
 
-            J("<div/>")
+            var title = J("<div/>")
                 .AddClass("category-title")
                 .Append(J("<a/>")
                     .AddClass("category-anchor")
@@ -104,6 +119,18 @@ namespace Serenity
                     .Attribute("name", options.IdPrefix + "Category" + categoryIndexes[category].ToString()))
                 .AppendTo(categoryDiv);
 
+            if (collapsed != null)
+            {
+                categoryDiv.AddClass(collapsed == true ? "collapsible collapsed" : "collapsible");
+                var img = J("<i/>").AddClass(collapsed == true ? "fa fa-plus" : "fa fa-minus").AppendTo(title);
+
+                title.Click(e =>
+                {
+                    categoryDiv.ToggleClass("collapsed");
+                    img.ToggleClass("fa-plus").ToggleClass("fa-minus");
+                });
+            }
+              
             return categoryDiv;
         }
 
@@ -246,8 +273,9 @@ namespace Serenity
 
             foreach (var x in items)
             {
-                if (result[x.Category] == null)
-                    result[x.Category] = order++;
+                var category = x.Category ?? options.DefaultCategory ?? "";
+                if (result[category] == null)
+                    result[category] = order++;
             }
 
             return result;
@@ -257,9 +285,10 @@ namespace Serenity
         {
             int idx = 0;
             var itemIndex = new JsDictionary<string, int>();
+            var itemCategory = new JsDictionary<string, string>();
             foreach (var x in items)
             {
-                x.Category = x.Category ?? options.DefaultCategory ?? "";
+                itemCategory[x.Name] = x.Category ?? options.DefaultCategory ?? "";
                 itemIndex[x.Name] = idx++;
             }
 
@@ -269,11 +298,13 @@ namespace Serenity
             items.Sort((x, y) => 
             {
                 var c = 0;
-                
-                if (x.Category != y.Category)
+
+                var xcategory = itemCategory[x.Name];
+                var ycategory = itemCategory[y.Name];
+                if (xcategory != ycategory)
                 {
-                    var c1 = categoryOrder[x.Category];
-                    var c2 = categoryOrder[y.Category];
+                    var c1 = categoryOrder[xcategory];
+                    var c2 = categoryOrder[ycategory];
                     if (c1 != null && c2 != null)
                         c = c1.Value - c2.Value;
                     else if (c1 != null)
@@ -283,7 +314,7 @@ namespace Serenity
                 }
 
                 if (c == 0)
-                    c = String.Compare(x.Category, y.Category);
+                    c = String.Compare(xcategory, ycategory);
 
                 if (c == 0)
                     c = itemIndex[x.Name].CompareTo(itemIndex[y.Name]);
@@ -296,11 +327,12 @@ namespace Serenity
             for (int i = 0; i < items.Count; i++)
             {
                 var item = items[i];
+                var category = itemCategory[item.Name];
 
-                if (!categoryIndexes.ContainsKey(item.Category))
+                if (!categoryIndexes.ContainsKey(category))
                 {
                     int index = categoryIndexes.Count + 1;
-                    categoryIndexes[item.Category] = index;
+                    categoryIndexes[category] = index;
 
                     if (index > 1)
                         J("<span/>")
@@ -310,7 +342,7 @@ namespace Serenity
                     
                     J("<a/>")
                         .AddClass("category-link")
-                        .Text(DetermineText(item.Category, prefix => prefix + "Categories." + item.Category))
+                        .Text(DetermineText(category, prefix => prefix + "Categories." + category))
                         .Attribute("tabindex", "-1")
                         .Attribute("href", "#" + options.IdPrefix + "Category" + index.ToString())
                         .Click(CategoryLinkClick)
@@ -331,9 +363,13 @@ namespace Serenity
 
             var title = J("a[name=" + e.Target.GetAttribute("href").ToString().Substr(1) + "]");
 
+            if (title.Closest(".category").HasClass("collapsed"))
+                title.Closest(".category").Children(".category-title").Click();
+
             Action animate = delegate {
                 title.FadeTo(100, 0.5, () => title.FadeTo(100, 1, () => { }));
             };
+
 
             var intoView = title.Closest(".category");
             if (intoView.Closest(":scrollable(both)").Length == 0)
@@ -401,8 +437,7 @@ namespace Serenity
             {
                 var item = items[i];
                 if (item.OneWay != true &&
-                    !(Mode == PropertyGridMode.Insert && item.Insertable == false) &&
-                    !(Mode == PropertyGridMode.Update && item.Updatable == false))
+                    CanModifyItem(item))
                 {
                     var editor = editors[i];
                     EditorUtils.SaveValue(editor, item, target);
@@ -416,6 +451,32 @@ namespace Serenity
             EditorUtils.SaveValue(editor, item, target);
         }
 
+        private bool CanModifyItem(PropertyItem item)
+        {
+            if (Mode == PropertyGridMode.Insert)
+            {
+                if (item.Insertable == false)
+                    return false;
+
+                if (item.InsertPermission == null)
+                    return true;
+
+                return Q.Authorization.HasPermission(item.InsertPermission);
+            }
+            else if (Mode == PropertyGridMode.Update)
+            {
+                if (item.Updatable == false)
+                    return false;
+
+                if (item.UpdatePermission == null)
+                    return true;
+
+                return Q.Authorization.HasPermission(item.UpdatePermission);
+            }
+
+            return true;
+        }
+
         private void UpdateInterface()
         {
             for (var i = 0; i < editors.Count; i++)
@@ -423,19 +484,20 @@ namespace Serenity
                 var item = items[i];
                 var editor = editors[i];
 
-                bool readOnly = item.ReadOnly == true ||
-                    (Mode == PropertyGridMode.Insert && item.Insertable == false) ||
-                    (Mode == PropertyGridMode.Update && item.Updatable == false);
-
+                bool readOnly = item.ReadOnly == true || !CanModifyItem(item);
                 EditorUtils.SetReadOnly(editor, readOnly);
                 EditorUtils.SetRequired(editor, !readOnly && Q.IsTrue(item.Required) && 
                     (item.EditorType != "Boolean"));
 
                 if (item.Visible == false ||
+                    item.ReadPermission != null ||
+                    item.InsertPermission != null ||
+                    item.UpdatePermission != null ||
                     item.HideOnInsert == true ||
                     item.HideOnUpdate == true)
                 {
                     bool hidden = 
+                        (item.ReadPermission != null && !Q.Authorization.HasPermission(item.ReadPermission)) ||
                         item.Visible == false ||
                         (Mode == PropertyGridMode.Insert && item.HideOnInsert == true) ||
                         (Mode == PropertyGridMode.Update && item.HideOnUpdate == true);
